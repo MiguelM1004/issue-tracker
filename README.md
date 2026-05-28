@@ -8,8 +8,7 @@
 
 ## 🚀 Demo en producción
 
-🔗 **[Ver aplicación desplegada](https://issuetrack-demo.vercel.app)**  
-*(Reemplaza este enlace con tu URL de Vercel/Netlify)*
+🔗 **[Ver aplicación desplegada](https://issue-tracker-8hn18jhns-miguel-issuetrack.vercel.app)**
 
 ---
 
