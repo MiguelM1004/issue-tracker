@@ -11,6 +11,7 @@ import KanbanBoard from '../components/KanbanBoard'
 import SkeletonCard from '../components/SkeletonCard'
 import { useIssues } from '../hooks/useIssues'
 import { useAuth } from '../context/AuthContext'
+import IssueChart from '../components/IssueChart'
 
 export default function DashboardPage() {
   const { session } = useAuth()
@@ -228,6 +229,9 @@ export default function DashboardPage() {
 
         {/* Stats */}
         <StatsBar issues={issues} />
+
+        {/* Gráficas */}
+        {!loading && <IssueChart issues={issues} />}
 
         {/* Filters */}
         <Filters
