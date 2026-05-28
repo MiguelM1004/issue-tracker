@@ -7,6 +7,8 @@ import IssueModal from '../components/IssueModal'
 import Filters from '../components/Filters'
 import EmptyState from '../components/EmptyState'
 import Spinner from '../components/Spinner'
+import KanbanBoard from '../components/KanbanBoard'
+import SkeletonCard from '../components/SkeletonCard'
 import { useIssues } from '../hooks/useIssues'
 import { useAuth } from '../context/AuthContext'
 
@@ -17,13 +19,12 @@ export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingIssue, setEditingIssue] = useState(null)
   const [mutating, setMutating] = useState(false)
+  const [viewMode, setViewMode] = useState('grid')
 
-  // Filters
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
 
-  // ── Filtered issues ──────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return issues.filter((issue) => {
       const matchSearch =
@@ -38,10 +39,24 @@ export default function DashboardPage() {
 
   const isFiltered = !!(search || filterStatus || filterPriority)
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
   const openCreate = () => { setEditingIssue(null); setIsModalOpen(true) }
   const openEdit = (issue) => { setEditingIssue(issue); setIsModalOpen(true) }
   const closeModal = () => { if (!mutating) { setIsModalOpen(false); setEditingIssue(null) } }
+
+  const handleDrop = async (issueId, newStatus) => {
+    try {
+      const issue = issues.find((i) => i.id === issueId)
+      if (!issue) return
+      await updateIssue(issueId, { ...issue, estado: newStatus })
+    } catch (err) {
+      Swal.fire({
+        title: 'Error',
+        text: 'No se pudo actualizar el estado de la incidencia.',
+        icon: 'error',
+        customClass: { popup: 'swal2-popup' },
+      })
+    }
+  }
 
   const handleSubmit = async (form) => {
     setMutating(true)
@@ -114,7 +129,6 @@ export default function DashboardPage() {
     })
   }
 
-  // ── Error state ──────────────────────────────────────────────────────────────
   if (error) {
     return (
       <div className="noise-bg min-h-screen grid-bg">
@@ -146,7 +160,7 @@ export default function DashboardPage() {
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Page header */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 animate-slide-up">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -164,15 +178,52 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#060810] font-semibold text-sm transition-all duration-200 shadow-[0_0_20px_rgba(6,182,212,0.25)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] self-start sm:self-auto"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Nueva incidencia
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {/* Toggle vista */}
+            <div className="flex items-center bg-[#161b22] border border-[#21262d] rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                  viewMode === 'grid'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-[#8b949e] hover:text-white'
+                }`}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <rect x="1" y="1" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="7" y="1" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="1" y="7" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="7" y="7" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                </svg>
+                Grid
+              </button>
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                  viewMode === 'kanban'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-[#8b949e] hover:text-white'
+                }`}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <rect x="1" y="1" width="2" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="5" y="1" width="2" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="9" y="1" width="2" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                </svg>
+                Kanban
+              </button>
+            </div>
+
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#060810] font-semibold text-sm transition-all duration-200 shadow-[0_0_20px_rgba(6,182,212,0.25)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)]"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              Nueva incidencia
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -207,16 +258,22 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Content */}
+        {/* Contenido */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 animate-fade-in">
-            <Spinner size="lg" />
-            <p className="text-xs text-[#8b949e] font-mono tracking-widest animate-pulse">
-              CARGANDO INCIDENCIAS...
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState filtered={isFiltered} />
+        ) : viewMode === 'kanban' ? (
+          <KanbanBoard
+            issues={filtered}
+            onEdit={openEdit}
+            onDelete={handleDelete}
+            onDrop={handleDrop}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((issue, i) => (
@@ -232,7 +289,6 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* Modal */}
       <IssueModal
         isOpen={isModalOpen}
         onClose={closeModal}
