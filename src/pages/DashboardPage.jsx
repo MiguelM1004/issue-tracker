@@ -10,10 +10,13 @@ import SkeletonCard from '../components/SkeletonCard'
 import KanbanBoard from '../components/KanbanBoard'
 import IssueChart from '../components/IssueChart'
 import Toast from '../components/Toast'
+import Pagination from '../components/Pagination'
 import { useIssues } from '../hooks/useIssues'
 import { useAuth } from '../context/AuthContext'
 import { useDebounce } from '../hooks/useDebounce'
 import { useToast } from '../hooks/useToast'
+
+const PAGE_SIZE = 9
 
 export default function DashboardPage() {
   const { session } = useAuth()
@@ -24,6 +27,7 @@ export default function DashboardPage() {
   const [editingIssue, setEditingIssue] = useState(null)
   const [mutating, setMutating] = useState(false)
   const [viewMode, setViewMode] = useState('grid')
+  const [currentPage, setCurrentPage] = useState(1)
 
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -43,6 +47,21 @@ export default function DashboardPage() {
       return matchSearch && matchStatus && matchPriority
     })
   }, [issues, debouncedSearch, filterStatus, filterPriority])
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, currentPage])
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Reset página cuando cambian los filtros
+  useMemo(() => { setCurrentPage(1) }, [debouncedSearch, filterStatus, filterPriority])
 
   const openCreate = () => { setEditingIssue(null); setIsModalOpen(true) }
   const openEdit = (issue) => { setEditingIssue(issue); setIsModalOpen(true) }
@@ -247,21 +266,27 @@ export default function DashboardPage() {
             onDrop={handleDrop}
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((issue, i) => (
-              <IssueCard
-                key={issue.id}
-                issue={issue}
-                index={i}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginated.map((issue, i) => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  index={i}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          </>
         )}
       </main>
 
-      {/* Toasts */}
       <Toast toasts={toasts} onRemove={removeToast} />
 
       <IssueModal
