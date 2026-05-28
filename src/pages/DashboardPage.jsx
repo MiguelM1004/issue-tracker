@@ -6,76 +6,92 @@ import IssueCard from '../components/IssueCard'
 import IssueModal from '../components/IssueModal'
 import Filters from '../components/Filters'
 import EmptyState from '../components/EmptyState'
-import Spinner from '../components/Spinner'
+import SkeletonCard from '../components/SkeletonCard'
+import KanbanBoard from '../components/KanbanBoard'
+import IssueChart from '../components/IssueChart'
+import Toast from '../components/Toast'
+import Pagination from '../components/Pagination'
 import { useIssues } from '../hooks/useIssues'
 import { useAuth } from '../context/AuthContext'
+import { useDebounce } from '../hooks/useDebounce'
+import { useToast } from '../hooks/useToast'
+
+const PAGE_SIZE = 9
 
 export default function DashboardPage() {
   const { session } = useAuth()
   const { issues, loading, error, fetchIssues, createIssue, updateIssue, deleteIssue } = useIssues()
+  const { toasts, addToast, removeToast } = useToast()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingIssue, setEditingIssue] = useState(null)
   const [mutating, setMutating] = useState(false)
+  const [viewMode, setViewMode] = useState('grid')
+  const [currentPage, setCurrentPage] = useState(1)
 
-  // Filters
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
 
-  // ── Filtered issues ──────────────────────────────────────────────────────────
+  const debouncedSearch = useDebounce(search, 300)
+  const isFiltered = !!(search || filterStatus || filterPriority)
+
   const filtered = useMemo(() => {
     return issues.filter((issue) => {
       const matchSearch =
-        !search ||
-        issue.titulo?.toLowerCase().includes(search.toLowerCase()) ||
-        issue.descripcion?.toLowerCase().includes(search.toLowerCase())
+        !debouncedSearch ||
+        issue.titulo?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        issue.descripcion?.toLowerCase().includes(debouncedSearch.toLowerCase())
       const matchStatus = !filterStatus || issue.estado === filterStatus
       const matchPriority = !filterPriority || issue.prioridad === filterPriority
       return matchSearch && matchStatus && matchPriority
     })
-  }, [issues, search, filterStatus, filterPriority])
+  }, [issues, debouncedSearch, filterStatus, filterPriority])
 
-  const isFiltered = !!(search || filterStatus || filterPriority)
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, currentPage])
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Reset página cuando cambian los filtros
+  useMemo(() => { setCurrentPage(1) }, [debouncedSearch, filterStatus, filterPriority])
+
   const openCreate = () => { setEditingIssue(null); setIsModalOpen(true) }
   const openEdit = (issue) => { setEditingIssue(issue); setIsModalOpen(true) }
   const closeModal = () => { if (!mutating) { setIsModalOpen(false); setEditingIssue(null) } }
+
+  const handleDrop = async (issueId, newStatus) => {
+    try {
+      const issue = issues.find((i) => i.id === issueId)
+      if (!issue) return
+      await updateIssue(issueId, { ...issue, estado: newStatus })
+      addToast({ type: 'success', title: 'Estado actualizado', message: `Movido a "${newStatus}"` })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Error', message: 'No se pudo actualizar el estado.' })
+    }
+  }
 
   const handleSubmit = async (form) => {
     setMutating(true)
     try {
       if (editingIssue) {
         await updateIssue(editingIssue.id, form)
-        Swal.fire({
-          title: '¡Actualizado!',
-          text: 'La incidencia fue actualizada correctamente.',
-          icon: 'success',
-          timer: 2000,
-          showConfirmButton: false,
-          customClass: { popup: 'swal2-popup' },
-        })
+        addToast({ type: 'success', title: '¡Actualizado!', message: 'Incidencia actualizada correctamente.' })
       } else {
         await createIssue(form)
-        Swal.fire({
-          title: '¡Creado!',
-          text: 'Nueva incidencia registrada en el sistema.',
-          icon: 'success',
-          timer: 2000,
-          showConfirmButton: false,
-          customClass: { popup: 'swal2-popup' },
-        })
+        addToast({ type: 'success', title: '¡Creado!', message: 'Nueva incidencia registrada.' })
       }
       setIsModalOpen(false)
       setEditingIssue(null)
     } catch (err) {
-      Swal.fire({
-        title: 'Error',
-        text: err.message || 'No se pudo guardar la incidencia. Intenta de nuevo.',
-        icon: 'error',
-        customClass: { popup: 'swal2-popup' },
-      })
+      addToast({ type: 'error', title: 'Error', message: err.message || 'No se pudo guardar.' })
     } finally {
       setMutating(false)
     }
@@ -94,27 +110,14 @@ export default function DashboardPage() {
       if (result.isConfirmed) {
         try {
           await deleteIssue(issue.id)
-          Swal.fire({
-            title: 'Eliminado',
-            text: 'La incidencia fue eliminada del sistema.',
-            icon: 'success',
-            timer: 1800,
-            showConfirmButton: false,
-            customClass: { popup: 'swal2-popup' },
-          })
+          addToast({ type: 'info', title: 'Eliminado', message: 'La incidencia fue eliminada.' })
         } catch (err) {
-          Swal.fire({
-            title: 'Error al eliminar',
-            text: err.message || 'No se pudo eliminar. Intenta de nuevo.',
-            icon: 'error',
-            customClass: { popup: 'swal2-popup' },
-          })
+          addToast({ type: 'error', title: 'Error al eliminar', message: err.message || 'No se pudo eliminar.' })
         }
       }
     })
   }
 
-  // ── Error state ──────────────────────────────────────────────────────────────
   if (error) {
     return (
       <div className="noise-bg min-h-screen grid-bg">
@@ -146,7 +149,7 @@ export default function DashboardPage() {
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Page header */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 animate-slide-up">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -164,19 +167,58 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#060810] font-semibold text-sm transition-all duration-200 shadow-[0_0_20px_rgba(6,182,212,0.25)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] self-start sm:self-auto"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Nueva incidencia
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center bg-[#161b22] border border-[#21262d] rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                  viewMode === 'grid'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-[#8b949e] hover:text-white'
+                }`}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <rect x="1" y="1" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="7" y="1" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="1" y="7" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="7" y="7" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                </svg>
+                Grid
+              </button>
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                  viewMode === 'kanban'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-[#8b949e] hover:text-white'
+                }`}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <rect x="1" y="1" width="2" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="5" y="1" width="2" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                  <rect x="9" y="1" width="2" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+                </svg>
+                Kanban
+              </button>
+            </div>
+
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#060810] font-semibold text-sm transition-all duration-200 shadow-[0_0_20px_rgba(6,182,212,0.25)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)]"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              Nueva incidencia
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
         <StatsBar issues={issues} />
+
+        {/* Gráficas */}
+        {!loading && <IssueChart issues={issues} />}
 
         {/* Filters */}
         <Filters
@@ -207,32 +249,46 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Content */}
+        {/* Contenido */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 animate-fade-in">
-            <Spinner size="lg" />
-            <p className="text-xs text-[#8b949e] font-mono tracking-widest animate-pulse">
-              CARGANDO INCIDENCIAS...
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState filtered={isFiltered} />
+        ) : viewMode === 'kanban' ? (
+          <KanbanBoard
+            issues={filtered}
+            onEdit={openEdit}
+            onDelete={handleDelete}
+            onDrop={handleDrop}
+          />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((issue, i) => (
-              <IssueCard
-                key={issue.id}
-                issue={issue}
-                index={i}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginated.map((issue, i) => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  index={i}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          </>
         )}
       </main>
 
-      {/* Modal */}
+      <Toast toasts={toasts} onRemove={removeToast} />
+
       <IssueModal
         isOpen={isModalOpen}
         onClose={closeModal}
