@@ -6,17 +6,19 @@ import IssueCard from '../components/IssueCard'
 import IssueModal from '../components/IssueModal'
 import Filters from '../components/Filters'
 import EmptyState from '../components/EmptyState'
-import Spinner from '../components/Spinner'
-import KanbanBoard from '../components/KanbanBoard'
 import SkeletonCard from '../components/SkeletonCard'
+import KanbanBoard from '../components/KanbanBoard'
+import IssueChart from '../components/IssueChart'
+import Toast from '../components/Toast'
 import { useIssues } from '../hooks/useIssues'
 import { useAuth } from '../context/AuthContext'
-import IssueChart from '../components/IssueChart'
 import { useDebounce } from '../hooks/useDebounce'
+import { useToast } from '../hooks/useToast'
 
 export default function DashboardPage() {
   const { session } = useAuth()
   const { issues, loading, error, fetchIssues, createIssue, updateIssue, deleteIssue } = useIssues()
+  const { toasts, addToast, removeToast } = useToast()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingIssue, setEditingIssue] = useState(null)
@@ -26,6 +28,9 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
+
+  const debouncedSearch = useDebounce(search, 300)
+  const isFiltered = !!(search || filterStatus || filterPriority)
 
   const filtered = useMemo(() => {
     return issues.filter((issue) => {
@@ -39,9 +44,6 @@ export default function DashboardPage() {
     })
   }, [issues, debouncedSearch, filterStatus, filterPriority])
 
-  const debouncedSearch = useDebounce(search, 300)
-  const isFiltered = !!(search || filterStatus || filterPriority)
-
   const openCreate = () => { setEditingIssue(null); setIsModalOpen(true) }
   const openEdit = (issue) => { setEditingIssue(issue); setIsModalOpen(true) }
   const closeModal = () => { if (!mutating) { setIsModalOpen(false); setEditingIssue(null) } }
@@ -51,13 +53,9 @@ export default function DashboardPage() {
       const issue = issues.find((i) => i.id === issueId)
       if (!issue) return
       await updateIssue(issueId, { ...issue, estado: newStatus })
+      addToast({ type: 'success', title: 'Estado actualizado', message: `Movido a "${newStatus}"` })
     } catch (err) {
-      Swal.fire({
-        title: 'Error',
-        text: 'No se pudo actualizar el estado de la incidencia.',
-        icon: 'error',
-        customClass: { popup: 'swal2-popup' },
-      })
+      addToast({ type: 'error', title: 'Error', message: 'No se pudo actualizar el estado.' })
     }
   }
 
@@ -66,34 +64,15 @@ export default function DashboardPage() {
     try {
       if (editingIssue) {
         await updateIssue(editingIssue.id, form)
-        Swal.fire({
-          title: '¡Actualizado!',
-          text: 'La incidencia fue actualizada correctamente.',
-          icon: 'success',
-          timer: 2000,
-          showConfirmButton: false,
-          customClass: { popup: 'swal2-popup' },
-        })
+        addToast({ type: 'success', title: '¡Actualizado!', message: 'Incidencia actualizada correctamente.' })
       } else {
         await createIssue(form)
-        Swal.fire({
-          title: '¡Creado!',
-          text: 'Nueva incidencia registrada en el sistema.',
-          icon: 'success',
-          timer: 2000,
-          showConfirmButton: false,
-          customClass: { popup: 'swal2-popup' },
-        })
+        addToast({ type: 'success', title: '¡Creado!', message: 'Nueva incidencia registrada.' })
       }
       setIsModalOpen(false)
       setEditingIssue(null)
     } catch (err) {
-      Swal.fire({
-        title: 'Error',
-        text: err.message || 'No se pudo guardar la incidencia. Intenta de nuevo.',
-        icon: 'error',
-        customClass: { popup: 'swal2-popup' },
-      })
+      addToast({ type: 'error', title: 'Error', message: err.message || 'No se pudo guardar.' })
     } finally {
       setMutating(false)
     }
@@ -112,21 +91,9 @@ export default function DashboardPage() {
       if (result.isConfirmed) {
         try {
           await deleteIssue(issue.id)
-          Swal.fire({
-            title: 'Eliminado',
-            text: 'La incidencia fue eliminada del sistema.',
-            icon: 'success',
-            timer: 1800,
-            showConfirmButton: false,
-            customClass: { popup: 'swal2-popup' },
-          })
+          addToast({ type: 'info', title: 'Eliminado', message: 'La incidencia fue eliminada.' })
         } catch (err) {
-          Swal.fire({
-            title: 'Error al eliminar',
-            text: err.message || 'No se pudo eliminar. Intenta de nuevo.',
-            icon: 'error',
-            customClass: { popup: 'swal2-popup' },
-          })
+          addToast({ type: 'error', title: 'Error al eliminar', message: err.message || 'No se pudo eliminar.' })
         }
       }
     })
@@ -182,7 +149,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            {/* Toggle vista */}
             <div className="flex items-center bg-[#161b22] border border-[#21262d] rounded-lg p-1">
               <button
                 onClick={() => setViewMode('grid')}
@@ -294,6 +260,9 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+
+      {/* Toasts */}
+      <Toast toasts={toasts} onRemove={removeToast} />
 
       <IssueModal
         isOpen={isModalOpen}
