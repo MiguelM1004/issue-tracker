@@ -12,6 +12,7 @@ import SkeletonCard from '../components/SkeletonCard'
 import { useIssues } from '../hooks/useIssues'
 import { useAuth } from '../context/AuthContext'
 import IssueChart from '../components/IssueChart'
+import { useDebounce } from '../hooks/useDebounce'
 
 export default function DashboardPage() {
   const { session } = useAuth()
@@ -29,15 +30,16 @@ export default function DashboardPage() {
   const filtered = useMemo(() => {
     return issues.filter((issue) => {
       const matchSearch =
-        !search ||
-        issue.titulo?.toLowerCase().includes(search.toLowerCase()) ||
-        issue.descripcion?.toLowerCase().includes(search.toLowerCase())
+        !debouncedSearch ||
+        issue.titulo?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        issue.descripcion?.toLowerCase().includes(debouncedSearch.toLowerCase())
       const matchStatus = !filterStatus || issue.estado === filterStatus
       const matchPriority = !filterPriority || issue.prioridad === filterPriority
       return matchSearch && matchStatus && matchPriority
     })
-  }, [issues, search, filterStatus, filterPriority])
+  }, [issues, debouncedSearch, filterStatus, filterPriority])
 
+  const debouncedSearch = useDebounce(search, 300)
   const isFiltered = !!(search || filterStatus || filterPriority)
 
   const openCreate = () => { setEditingIssue(null); setIsModalOpen(true) }
